@@ -1,4 +1,5 @@
 import { PlatformEndpointsModule } from "@/platform/platform-endpoints-module";
+import { AdminUsersModule } from "@/modules/admin-users/admin-users.module";
 import { AtomsModule } from "@/modules/atoms/atoms.module";
 import { OAuth2Module } from "@/modules/auth/oauth2/oauth2.module";
 import { CalUnifiedCalendarsModule } from "@/modules/cal-unified-calendars/cal-unified-calendars.module";
@@ -16,6 +17,7 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
 
 @Module({
   imports: [
+    AdminUsersModule,
     OAuth2Module,
     OAuthClientModule,
     PlatformEndpointsModule,
