@@ -13,7 +13,7 @@ import type { ValidationError } from "@nestjs/common";
 import { BadRequestException, Logger, ValidationPipe, VersioningType } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import cookieParser from "cookie-parser";
-import { Request } from "express";
+import { NextFunction, Request, Response } from "express";
 import helmet from "helmet";
 import { CalendarServiceExceptionFilter } from "./filters/calendar-service-exception.filter";
 import { TRPCExceptionFilter } from "./filters/trpc-exception.filter";
@@ -23,8 +23,15 @@ import { ZodExceptionFilter } from "@/filters/zod-exception.filter";
 
 const logger: Logger = new Logger("Bootstrap");
 
+// This instance only serves the chatbot server, so every other route stays disabled.
+const ALLOWED_ROUTES = /^(\/api)?\/v2\/(users|me|bookings|schedules|event-types|slots)(\/|$)/;
+
 export const bootstrap = (app: NestExpressApplication): NestExpressApplication => {
   try {
+    app.use((req: Request, res: Response, next: NextFunction) =>
+      req.path === "/health" || ALLOWED_ROUTES.test(req.path) ? next() : res.sendStatus(404)
+    );
+
     if (!process.env.VERCEL) {
       app.enableShutdownHooks();
     }
