@@ -1,10 +1,12 @@
 import "./instrument";
 
 import {
-  API_VERSIONS,
-  API_VERSIONS_ENUM,
   CAL_API_VERSION_HEADER,
   VERSION_2024_04_15,
+  VERSION_2024_06_11,
+  VERSION_2024_06_14,
+  VERSION_2024_08_13,
+  VERSION_2024_09_04,
   X_CAL_CLIENT_ID,
   X_CAL_PLATFORM_EMBED,
   X_CAL_SECRET_KEY,
@@ -26,6 +28,14 @@ const logger: Logger = new Logger("Bootstrap");
 // This instance only serves the chatbot server, so every other route stays disabled.
 const ALLOWED_ROUTES = /^(\/api)?\/v2\/(users|me|bookings|schedules|event-types|slots)(\/|$)/;
 
+// The cal-api-version header is ignored so every route always runs its newest version.
+const LATEST_ROUTE_VERSIONS: Record<string, string> = {
+  bookings: VERSION_2024_08_13,
+  schedules: VERSION_2024_06_11,
+  "event-types": VERSION_2024_06_14,
+  slots: VERSION_2024_09_04,
+};
+
 export const bootstrap = (app: NestExpressApplication): NestExpressApplication => {
   try {
     app.use((req: Request, res: Response, next: NextFunction) =>
@@ -38,11 +48,8 @@ export const bootstrap = (app: NestExpressApplication): NestExpressApplication =
     app.enableVersioning({
       type: VersioningType.CUSTOM,
       extractor: (request: unknown) => {
-        const headerVersion = (request as Request)?.headers[CAL_API_VERSION_HEADER] as string | undefined;
-        if (headerVersion && API_VERSIONS.includes(headerVersion as API_VERSIONS_ENUM)) {
-          return headerVersion;
-        }
-        return VERSION_2024_04_15;
+        const route = (request as Request).path.match(/\/v2\/([^/]+)/)?.[1] ?? "";
+        return LATEST_ROUTE_VERSIONS[route] ?? VERSION_2024_09_04;
       },
       defaultVersion: VERSION_2024_04_15,
     });
