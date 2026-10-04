@@ -23,4 +23,5 @@ RUN yarn workspace @calcom/api-v2 run build
 
 EXPOSE 80
 
-CMD [ "yarn", "workspace", "@calcom/api-v2", "start:prod"]
+# The web app container used to run the migrations. The API runs alone now, so it applies them on start.
+CMD [ "sh", "-c", "yarn workspace @calcom/prisma db-deploy && yarn workspace @calcom/api-v2 start:prod" ]
