@@ -35,7 +35,8 @@ import { VercelWebhookController } from "@/vercel-webhook.controller";
 
     RedisModule,
     BullModule.forRoot({
-      redis: `${process.env.REDIS_URL}${process.env.NODE_ENV === "production" ? "?tls=true" : ""}`,
+      // Bull ignores the rediss:// scheme, so TLS must come from the URL query. A plain redis:// URL stays without TLS.
+      redis: `${process.env.REDIS_URL}${process.env.REDIS_URL?.startsWith("rediss://") ? "?tls=true" : ""}`,
     }),
     ThrottlerModule.forRootAsync({
       imports: [RedisModule],
