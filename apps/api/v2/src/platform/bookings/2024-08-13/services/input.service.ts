@@ -36,7 +36,7 @@ import { PlatformBookingsService } from "@/platform/bookings/shared/platform-boo
 import { EventTypesRepository_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.repository";
 import { OutputEventTypesService_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/services/output-event-types.service";
 import { apiToInternalintegrationsMapping } from "@/platform/event-types/event-types_2024_06_14/transformers";
-import { isApiKey, sha256Hash, stripApiKey } from "@/lib/api-key";
+import { isAdminApiKey, isApiKey, sha256Hash, stripApiKey, X_CAL_USER_ID } from "@/lib/api-key";
 import { defaultBookingResponses } from "@/lib/safe-parse/default-responses-booking";
 import { safeParse } from "@/lib/safe-parse/safe-parse";
 import { ApiKeysRepository } from "@/modules/api-keys/api-keys-repository";
@@ -719,6 +719,10 @@ export class InputBookingsService_2024_08_13 {
     try {
       const bearerToken = req.get("Authorization")?.replace("Bearer ", "");
       if (bearerToken) {
+        if (isAdminApiKey(bearerToken)) {
+          // ApiAuthStrategy already checked that this user exists.
+          return Number(req.get(X_CAL_USER_ID));
+        }
         if (isApiKey(bearerToken, this.config.get<string>("api.apiKeyPrefix") ?? "cal_")) {
           const strippedApiKey = stripApiKey(bearerToken, this.config.get<string>("api.keyPrefix"));
           const apiKeyHash = sha256Hash(strippedApiKey);
