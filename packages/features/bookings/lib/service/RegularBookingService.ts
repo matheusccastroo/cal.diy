@@ -1200,7 +1200,8 @@ async function handler(
         organizerOrFirstDynamicGroupMemberDefaultLocationUrl = defaultApp?.appLink;
       }
     } else {
-      locationBodyString = "integrations:daily";
+      // This fork has no default video app, so a booking without any location keeps none instead of Cal Video.
+      locationBodyString = "";
     }
   }
 
