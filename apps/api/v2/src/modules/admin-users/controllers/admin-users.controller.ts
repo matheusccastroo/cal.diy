@@ -43,7 +43,7 @@ export class AdminUsersController {
   ) {}
 
   @Post("/")
-  @ApiOperation({ summary: "Create a user with a default schedule and default event types" })
+  @ApiOperation({ summary: "Create a user with a default schedule" })
   async createUser(@Body() body: CreateManagedUserInput): Promise<GetManagedUserOutput> {
     if (!body.metadata?.chatbotUserId) {
       throw new BadRequestException(CHATBOT_USER_ID_REQUIRED);
