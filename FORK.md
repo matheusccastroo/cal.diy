@@ -21,6 +21,7 @@ This fork runs Cal.diy as an API-only backend for a chatbot server. Only that se
 
 - Emails are disabled by default.
 - Sign-up is disabled by default.
+- The default locale is `pt-BR` for new users, booking attendees and calendar links.
 
 ## Docker
 
