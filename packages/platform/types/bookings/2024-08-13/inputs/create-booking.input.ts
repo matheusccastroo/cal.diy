@@ -131,7 +131,7 @@ export class BaseBookingAttendee {
     enum: BookingLanguage,
     description: "The preferred language of the attendee. Used for booking confirmation.",
     example: BookingLanguage.it,
-    default: BookingLanguage.en,
+    default: BookingLanguage["pt-BR"],
   })
   @IsEnum(BookingLanguage)
   @IsOptional()

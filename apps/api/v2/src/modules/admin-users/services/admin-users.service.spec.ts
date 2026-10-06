@@ -16,7 +16,7 @@ describe("AdminUsersService", () => {
   const usersRepository = { create: jest.fn() };
   const schedulesService = { createUserDefaultSchedule: jest.fn() };
 
-  it("creates the user with a default schedule in the user time zone", async () => {
+  it("creates the user with the pt-BR locale and a default schedule in the user time zone", async () => {
     const module = await Test.createTestingModule({
       providers: [
         AdminUsersService,
@@ -34,7 +34,7 @@ describe("AdminUsersService", () => {
 
     const user = await module.get(AdminUsersService).createUser(body);
 
-    expect(usersRepository.create).toHaveBeenCalledWith(body, "alice-example.com");
+    expect(usersRepository.create).toHaveBeenCalledWith({ ...body, locale: "pt-BR" }, "alice-example.com");
     expect(schedulesService.createUserDefaultSchedule).toHaveBeenCalledWith(7, "America/Sao_Paulo");
     expect(user.defaultScheduleId).toBe(3);
   });
