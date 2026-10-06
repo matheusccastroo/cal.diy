@@ -3,6 +3,7 @@ import type { User } from "@calcom/prisma/client";
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Delete,
   Get,
@@ -13,6 +14,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from "@nestjs/common";
 import { ApiOperation, ApiTags as DocsTags } from "@nestjs/swagger";
@@ -50,6 +52,26 @@ export class AdminUsersController {
     const user = await this.adminUsersService.createUser(body);
 
     return { status: SUCCESS_STATUS, data: this.toOutput(user) };
+  }
+
+  @Get("/")
+  @ApiOperation({ summary: "Get a user by chatbotUserId" })
+  async getUserByChatbotUserId(
+    @Query("chatbotUserId") chatbotUserId?: string
+  ): Promise<GetManagedUserOutput> {
+    if (!chatbotUserId) {
+      throw new BadRequestException("chatbotUserId query parameter is required");
+    }
+
+    const users = await this.usersRepository.findByChatbotUserId(chatbotUserId);
+    if (!users.length) {
+      throw new NotFoundException(`User with chatbotUserId ${chatbotUserId} not found`);
+    }
+    if (users.length > 1) {
+      throw new ConflictException(`More than one user has chatbotUserId ${chatbotUserId}`);
+    }
+
+    return { status: SUCCESS_STATUS, data: this.toOutput(users[0]) };
   }
 
   @Get("/:userId")

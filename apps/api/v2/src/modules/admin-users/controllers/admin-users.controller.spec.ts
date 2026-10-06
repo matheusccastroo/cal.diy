@@ -3,7 +3,7 @@ jest.mock("@/modules/admin-users/services/admin-users.service", () => ({ AdminUs
 jest.mock("@/modules/users/users.repository", () => ({ UsersRepository: class {} }));
 
 import { SUCCESS_STATUS } from "@calcom/platform-constants";
-import { BadRequestException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { AdminUsersController } from "@/modules/admin-users/controllers/admin-users.controller";
 import { AdminUsersService } from "@/modules/admin-users/services/admin-users.service";
@@ -29,7 +29,12 @@ const user = {
 
 describe("AdminUsersController", () => {
   let controller: AdminUsersController;
-  const usersRepository = { findById: jest.fn(), update: jest.fn(), delete: jest.fn() };
+  const usersRepository = {
+    findById: jest.fn(),
+    findByChatbotUserId: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  };
   const adminUsersService = { createUser: jest.fn() };
 
   beforeEach(async () => {
@@ -89,6 +94,37 @@ describe("AdminUsersController", () => {
       usersRepository.findById.mockResolvedValue(null);
 
       await expect(controller.getUser(404)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe("getUserByChatbotUserId", () => {
+    it("rejects a missing or empty chatbotUserId", async () => {
+      await expect(controller.getUserByChatbotUserId(undefined)).rejects.toThrow(BadRequestException);
+      await expect(controller.getUserByChatbotUserId("")).rejects.toThrow(BadRequestException);
+      expect(usersRepository.findByChatbotUserId).not.toHaveBeenCalled();
+    });
+
+    it("returns the user", async () => {
+      usersRepository.findByChatbotUserId.mockResolvedValue([user]);
+
+      const result = await controller.getUserByChatbotUserId("chatbot-7");
+
+      expect(usersRepository.findByChatbotUserId).toHaveBeenCalledWith("chatbot-7");
+      expect(result.status).toBe(SUCCESS_STATUS);
+      expect(result.data).toMatchObject({ id: 7, metadata: { chatbotUserId: "chatbot-7" } });
+      expect(result.data).not.toHaveProperty("role");
+    });
+
+    it("throws NotFoundException when no user matches", async () => {
+      usersRepository.findByChatbotUserId.mockResolvedValue([]);
+
+      await expect(controller.getUserByChatbotUserId("chatbot-404")).rejects.toThrow(NotFoundException);
+    });
+
+    it("throws ConflictException when more than one user matches", async () => {
+      usersRepository.findByChatbotUserId.mockResolvedValue([user, { ...user, id: 8 }]);
+
+      await expect(controller.getUserByChatbotUserId("chatbot-7")).rejects.toThrow(ConflictException);
     });
   });
 
