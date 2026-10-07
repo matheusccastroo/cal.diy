@@ -23,6 +23,14 @@ import { DateInput, DateTime } from "luxon";
 import { NextApiRequest } from "next/types";
 import { v4 as uuidv4 } from "uuid";
 import { z } from "zod";
+import { isAdminApiKey, isApiKey, sha256Hash, stripApiKey, X_CAL_USER_ID } from "@/lib/api-key";
+import { defaultBookingResponses } from "@/lib/safe-parse/default-responses-booking";
+import { safeParse } from "@/lib/safe-parse/safe-parse";
+import { ApiKeysRepository } from "@/modules/api-keys/api-keys-repository";
+import { BookingSeatRepository } from "@/modules/booking-seat/booking-seat.repository";
+import { OAuthClientUsersService } from "@/modules/oauth-clients/services/oauth-clients-users.service";
+import { OAuthFlowService } from "@/modules/oauth-clients/services/oauth-flow.service";
+import { UsersRepository } from "@/modules/users/users.repository";
 import { BookingsRepository_2024_08_13 } from "@/platform/bookings/2024-08-13/repositories/bookings.repository";
 import {
   EventTypeWithOwnerAndTeam,
@@ -36,14 +44,6 @@ import { PlatformBookingsService } from "@/platform/bookings/shared/platform-boo
 import { EventTypesRepository_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.repository";
 import { OutputEventTypesService_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/services/output-event-types.service";
 import { apiToInternalintegrationsMapping } from "@/platform/event-types/event-types_2024_06_14/transformers";
-import { isApiKey, sha256Hash, stripApiKey } from "@/lib/api-key";
-import { defaultBookingResponses } from "@/lib/safe-parse/default-responses-booking";
-import { safeParse } from "@/lib/safe-parse/safe-parse";
-import { ApiKeysRepository } from "@/modules/api-keys/api-keys-repository";
-import { BookingSeatRepository } from "@/modules/booking-seat/booking-seat.repository";
-import { OAuthClientUsersService } from "@/modules/oauth-clients/services/oauth-clients-users.service";
-import { OAuthFlowService } from "@/modules/oauth-clients/services/oauth-flow.service";
-import { UsersRepository } from "@/modules/users/users.repository";
 
 type BookingRequest = NextApiRequest & {
   userId: number | undefined;
@@ -174,7 +174,7 @@ export class InputBookingsService_2024_08_13 {
       end: endTime.toISO(),
       eventTypeId: inputBooking.eventTypeId,
       timeZone: inputBooking.attendee.timeZone,
-      language: inputBooking.attendee.language || "en",
+      language: inputBooking.attendee.language || "pt-BR",
       metadata: {
         ...(inputBooking.metadata || {}),
         ...(platformClientId && { platformClientId }),
@@ -475,7 +475,7 @@ export class InputBookingsService_2024_08_13 {
         eventTypeId: inputBooking.eventTypeId,
         recurringEventId,
         timeZone: inputBooking.attendee.timeZone,
-        language: inputBooking.attendee.language || "en",
+        language: inputBooking.attendee.language || "pt-BR",
         metadata: inputBooking.metadata || {},
         hasHashedBookingLink: false,
         guests,
@@ -719,6 +719,10 @@ export class InputBookingsService_2024_08_13 {
     try {
       const bearerToken = req.get("Authorization")?.replace("Bearer ", "");
       if (bearerToken) {
+        if (isAdminApiKey(bearerToken)) {
+          // ApiAuthStrategy already checked that this user exists.
+          return Number(req.get(X_CAL_USER_ID));
+        }
         if (isApiKey(bearerToken, this.config.get<string>("api.apiKeyPrefix") ?? "cal_")) {
           const strippedApiKey = stripApiKey(bearerToken, this.config.get<string>("api.keyPrefix"));
           const apiKeyHash = sha256Hash(strippedApiKey);
