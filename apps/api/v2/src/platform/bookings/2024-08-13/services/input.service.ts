@@ -677,9 +677,10 @@ export class InputBookingsService_2024_08_13 {
     if (!booking.eventTypeId) {
       throw new NotFoundException(`Booking with uid=${bookingUid} is missing event type`);
     }
-    const eventType = await this.eventTypesRepository.getEventTypeByIdWithOwnerAndTeam(booking.eventTypeId);
+    const eventTypeId = inputBooking.eventTypeId ?? booking.eventTypeId;
+    const eventType = await this.eventTypesRepository.getEventTypeByIdWithOwnerAndTeam(eventTypeId);
     if (!eventType) {
-      throw new NotFoundException(`Event type with id=${booking.eventTypeId} not found`);
+      throw new NotFoundException(`Event type with id=${eventTypeId} not found`);
     }
     if (eventType.seatsPerTimeSlot && !isIndividualSeatReschedule) {
       throw new BadRequestException(
@@ -713,14 +714,10 @@ export class InputBookingsService_2024_08_13 {
       bookingResponses.attendeePhoneNumber = attendee.phoneNumber || undefined;
     }
 
-    // preserve the original booking duration instead of using the default event type length
-    // this ensures that bookings with non-default durations (from multi-duration event types) are preserved on reschedule
-    const originalDurationInMinutes = this.getOriginalBookingDuration(booking.startTime, booking.endTime);
-
     const startTime = DateTime.fromISO(inputBooking.start, {
       zone: "utc",
     }).setZone(attendee.timeZone);
-    const endTime = startTime.plus({ minutes: originalDurationInMinutes });
+    const endTime = startTime.plus({ minutes: inputBooking.lengthInMinutes ?? eventType.length });
     return {
       start: startTime.toISO(),
       end: endTime.toISO(),
