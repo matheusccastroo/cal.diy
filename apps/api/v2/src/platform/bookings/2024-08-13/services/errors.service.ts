@@ -1,11 +1,6 @@
 import { CreateBookingInput } from "@calcom/platform-types";
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 
 @Injectable()
 export class ErrorsBookingsService_2024_08_13 {
@@ -55,7 +50,7 @@ export class ErrorsBookingsService_2024_08_13 {
       } else if (error.message === "occurrence_unavailable") {
         // The filter returns the exception name as error.code.
         throw Object.assign(
-          new ConflictException("One or more occurrences of the recurring booking are not available"),
+          new BadRequestException("One or more occurrences of the recurring booking are not available"),
           { name: "occurrence_unavailable" }
         );
       } else if (error.message === "booker_limit_exceeded_error") {

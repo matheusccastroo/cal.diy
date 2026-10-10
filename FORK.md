@@ -23,8 +23,7 @@ This fork runs Cal.diy as an API-only backend for a chatbot server. Only that se
 - `count` is the number of calendar dates to make, from 2 to 366. A repeat of 1 year stops at 1 year.
 - The API calculates the dates in the time zone of the user. A monthly date keeps the day of the month. If a month does not have that day, the API uses the last day of the month.
 - For `daily` and `monthly`, the API removes each date that is not fully in the working hours of the user. It never removes the first date.
-- The API checks all occurrences before it writes the first occurrence. If an occurrence after the first is not available, the API returns 409 with `error.code` set to `occurrence_unavailable`. It makes no booking.
-- If the first date is not available, the API returns the same error as for a single booking.
+- The API checks all occurrences before it writes the first occurrence. If an occurrence is not available, the API returns 400 with `error.code` set to `occurrence_unavailable`. It makes no booking.
 - If the write of an occurrence fails, the API cancels the occurrences that the request wrote.
 - Each occurrence gets the request metadata. The response is an array with one item for each occurrence.
 - The recurrence frequency enum of the API has `daily`.
