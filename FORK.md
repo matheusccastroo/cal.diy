@@ -17,6 +17,21 @@ This fork runs Cal.diy as an API-only backend for a chatbot server. Only that se
 - Only these routes are available: users, me, bookings, schedules, event types, slots and health. All other routes return 404.
 - The API always uses the latest version of each route. The `cal-api-version` header is ignored.
 
+## Bookings
+
+- `POST /v2/bookings` accepts an optional `recurrence: { frequency, count }`. `frequency` is `daily`, `weekly` or `monthly`. The event type does not need a recurrence.
+- `count` is the number of calendar dates to make, from 2 to 366. A repeat of 1 year stops at 1 year.
+- The API calculates the dates in the time zone of the user. A monthly date keeps the day of the month. If a month does not have that day, the API uses the last day of the month.
+- For `daily` and `monthly`, the API removes each date that is not fully in the working hours of the user. It never removes the first date.
+- The API checks all occurrences before it writes the first occurrence. If an occurrence after the first is not available, the API returns 409 with `error.code` set to `occurrence_unavailable`. It makes no booking.
+- If the first date is not available, the API returns the same error as for a single booking.
+- If the write of an occurrence fails, the API cancels the occurrences that the request wrote.
+- Each occurrence gets the request metadata. The response is an array with one item for each occurrence.
+- The recurrence frequency enum of the API has `daily`.
+- `POST /v2/bookings/:uid/reschedule` accepts an optional `eventTypeId`. The booking moves to that event type, and the owner of the event type becomes the host.
+- The reschedule accepts an optional `lengthInMinutes` with any value. Without it, the new booking gets the length of the event type.
+- A reschedule to another host does not remove the old host's external calendar event. Fix this before calendar sync.
+
 ## Defaults
 
 - Emails are disabled by default.
