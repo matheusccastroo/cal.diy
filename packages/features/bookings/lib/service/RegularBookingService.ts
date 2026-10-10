@@ -890,7 +890,6 @@ async function handler(
         ? eventTypeWithUsers.users.filter((user: IsFixedAwareUserWithCredentials) => user.isFixed)
         : [];
 
-      // The first slot is checked below, so it keeps the error of a single booking.
       const throwOccurrenceUnavailable = (error: unknown): never => {
         throw error instanceof Error && error.message === ErrorCode.NoAvailableUsersFound
           ? new Error(ErrorCode.OccurrenceUnavailable)
@@ -898,7 +897,7 @@ async function handler(
       };
 
       for (
-        let i = 1;
+        let i = 0;
         i < input.bookingData.allRecurringDates.length &&
         i < input.bookingData.numSlotsToCheckForAvailability;
         i++
