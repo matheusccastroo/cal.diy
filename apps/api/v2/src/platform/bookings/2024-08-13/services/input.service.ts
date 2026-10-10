@@ -428,22 +428,27 @@ export class InputBookingsService_2024_08_13 {
     this.validateBookingLengthInMinutes(inputBooking, eventType);
     const lengthInMinutes = inputBooking.lengthInMinutes ?? eventType.length;
 
-    const { frequency, count, interval } = inputBooking.recurrence
-      ? { ...inputBooking.recurrence, interval: 1 }
+    const { recurrence } = inputBooking;
+    if (recurrence && inputBooking.recurrenceCount) {
+      throw new BadRequestException("Provide recurrence or recurrenceCount, not both.");
+    }
+    const { frequency, count, interval } = recurrence
+      ? { ...recurrence, interval: 1 }
       : this.getEventTypeRecurrence(inputBooking, eventType);
 
     const events = [];
     const recurringEventId = uuidv4();
 
+    // A recurrence of the event type keeps the upstream behavior: the attendee time zone and no working-hours filter.
     const firstStartTime = DateTime.fromISO(inputBooking.start, {
       zone: "utc",
-    }).setZone(eventType.owner?.timeZone ?? inputBooking.attendee.timeZone);
+    }).setZone((recurrence && eventType.owner?.timeZone) || inputBooking.attendee.timeZone);
     // Each date is counted from the first date, so a monthly repeat from 31 Jan gives 28 Feb and then 31 Mar.
     const allStartTimes = Array.from({ length: count }, (_, i) =>
       firstStartTime.plus({ [FREQUENCY_UNITS[frequency]]: i * interval })
     );
     const startTimes =
-      frequency === FrequencyInput.daily || frequency === FrequencyInput.monthly
+      recurrence && (frequency === FrequencyInput.daily || frequency === FrequencyInput.monthly)
         ? await this.removeDatesOutsideWorkingHours(eventType, allStartTimes, lengthInMinutes)
         : allStartTimes;
 
