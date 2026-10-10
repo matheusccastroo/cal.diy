@@ -733,6 +733,7 @@ export class InputBookingsService_2024_08_13 {
       hasHashedBookingLink: false,
       guests: bookingResponses.guests,
       responses: {
+        ...inputBooking.bookingFieldsResponses,
         ...bookingResponses,
         rescheduledReason: inputBooking.reschedulingReason,
       },
