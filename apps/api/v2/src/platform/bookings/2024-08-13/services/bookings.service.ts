@@ -136,7 +136,7 @@ export class BookingsService_2024_08_13 {
 
       body.eventTypeId = eventType.id;
 
-      const isRecurring = !!eventType?.recurringEvent;
+      const isRecurring = !!eventType?.recurringEvent || ("recurrence" in body && !!body.recurrence);
       const isSeated = !!eventType?.seatsPerTimeSlot;
 
       await this.hasRequiredBookingFieldsResponses(body, eventType);
@@ -402,21 +402,36 @@ export class BookingsService_2024_08_13 {
     eventType: EventTypeWithOwnerAndTeam
   ) {
     const bookingRequest = await this.inputService.createRecurringBookingRequest(request, body, eventType);
-    const bookings = await this.recurringBookingService.createBooking({
-      bookingData: bookingRequest.body,
-      bookingMeta: {
-        userId: bookingRequest.userId,
-        hostname: bookingRequest.headers?.host || "",
-        platformClientId: bookingRequest.platformClientId,
-        platformRescheduleUrl: bookingRequest.platformRescheduleUrl,
-        platformCancelUrl: bookingRequest.platformCancelUrl,
-        platformBookingUrl: bookingRequest.platformBookingUrl,
-        platformBookingLocation: bookingRequest.platformBookingLocation,
-        noEmail: bookingRequest.noEmail,
-        areCalendarEventsEnabled: bookingRequest.areCalendarEventsEnabled,
-      },
-      creationSource: "API_V2",
-    });
+    const bookings = await this.recurringBookingService
+      .createBooking({
+        bookingData: bookingRequest.body,
+        bookingMeta: {
+          userId: bookingRequest.userId,
+          hostname: bookingRequest.headers?.host || "",
+          platformClientId: bookingRequest.platformClientId,
+          platformRescheduleUrl: bookingRequest.platformRescheduleUrl,
+          platformCancelUrl: bookingRequest.platformCancelUrl,
+          platformBookingUrl: bookingRequest.platformBookingUrl,
+          platformBookingLocation: bookingRequest.platformBookingLocation,
+          noEmail: bookingRequest.noEmail,
+          areCalendarEventsEnabled: bookingRequest.areCalendarEventsEnabled,
+        },
+        creationSource: "API_V2",
+      })
+      .catch(async (error) => {
+        // Occurrences are written one by one without a transaction, so a failed write leaves part of the series.
+        const written = await this.bookingsRepository.getRecurringByUid(
+          bookingRequest.body[0].recurringEventId
+        );
+        for (const { uid } of written) {
+          await handleCancelBooking({
+            bookingData: { uid, cancellationReason: "The recurring booking could not be created" },
+            userId: bookingRequest.userId,
+            actionSource: "API_V2",
+          });
+        }
+        throw error;
+      });
     const ids = bookings.map((booking) => booking.id || 0);
     const outputBookings = await this.outputService.getOutputRecurringBookings(ids);
     const isPlatformManagedUserBooking = !!(bookings[0]?.userId && bookings[0]?.user?.isPlatformManaged);

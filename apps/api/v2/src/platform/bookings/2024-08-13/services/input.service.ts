@@ -1,5 +1,7 @@
+import { Frequency, FrequencyInput } from "@calcom/platform-enums";
 import { CreationSource } from "@calcom/platform-libraries";
 import { EventTypeMetaDataSchema } from "@calcom/platform-libraries/event-types";
+import { getWorkingHoursInMillis } from "@calcom/platform-libraries/schedules";
 import type {
   CancelBookingInput,
   CancelBookingInput_2024_08_13,
@@ -44,6 +46,7 @@ import { PlatformBookingsService } from "@/platform/bookings/shared/platform-boo
 import { EventTypesRepository_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/event-types.repository";
 import { OutputEventTypesService_2024_06_14 } from "@/platform/event-types/event-types_2024_06_14/services/output-event-types.service";
 import { apiToInternalintegrationsMapping } from "@/platform/event-types/event-types_2024_06_14/transformers";
+import { SchedulesRepository_2024_04_15 } from "@/platform/schedules/schedules_2024_04_15/schedules.repository";
 
 type BookingRequest = NextApiRequest & {
   userId: number | undefined;
@@ -60,16 +63,6 @@ type OAuthRequestParams = {
   areCalendarEventsEnabled: boolean;
 };
 
-export enum Frequency {
-  YEARLY,
-  MONTHLY,
-  WEEKLY,
-  DAILY,
-  HOURLY,
-  MINUTELY,
-  SECONDLY,
-}
-
 const recurringEventSchema = z.object({
   dtstart: z.string().optional(),
   interval: z.number().int(),
@@ -77,6 +70,13 @@ const recurringEventSchema = z.object({
   freq: z.nativeEnum(Frequency),
   until: z.string().optional(),
 });
+
+const FREQUENCY_UNITS = {
+  [FrequencyInput.yearly]: "years",
+  [FrequencyInput.monthly]: "months",
+  [FrequencyInput.weekly]: "weeks",
+  [FrequencyInput.daily]: "days",
+} as const;
 
 @Injectable()
 export class InputBookingsService_2024_08_13 {
@@ -91,7 +91,8 @@ export class InputBookingsService_2024_08_13 {
     private readonly bookingSeatRepository: BookingSeatRepository,
     private readonly outputEventTypesService: OutputEventTypesService_2024_06_14,
     private readonly platformBookingsService: PlatformBookingsService,
-    private readonly usersRepository: UsersRepository
+    private readonly usersRepository: UsersRepository,
+    private readonly schedulesRepository: SchedulesRepository_2024_04_15
   ) {}
 
   async createBookingRequest(
@@ -424,31 +425,27 @@ export class InputBookingsService_2024_08_13 {
     eventType: EventTypeWithOwnerAndTeam,
     platformClientId?: string
   ) {
-    if (!eventType.recurringEvent) {
-      throw new NotFoundException(`Event type with id=${inputBooking.eventTypeId} is not a recurring event`);
-    }
-
     this.validateBookingLengthInMinutes(inputBooking, eventType);
     const lengthInMinutes = inputBooking.lengthInMinutes ?? eventType.length;
 
-    const occurrence = recurringEventSchema.parse(eventType.recurringEvent);
-    const repeatsEvery = occurrence.interval;
-
-    if (inputBooking.recurrenceCount && inputBooking.recurrenceCount > occurrence.count) {
-      throw new BadRequestException(
-        "Provided recurrence count is higher than the event type's recurring event count."
-      );
-    }
-    const repeatsTimes = inputBooking.recurrenceCount || occurrence.count;
-    // note(Lauris): timeBetween 0=yearly, 1=monthly and 2=weekly
-    const timeBetween = occurrence.freq;
+    const { frequency, count, interval } = inputBooking.recurrence
+      ? { ...inputBooking.recurrence, interval: 1 }
+      : this.getEventTypeRecurrence(inputBooking, eventType);
 
     const events = [];
     const recurringEventId = uuidv4();
 
-    let startTime = DateTime.fromISO(inputBooking.start, {
+    const firstStartTime = DateTime.fromISO(inputBooking.start, {
       zone: "utc",
-    }).setZone(inputBooking.attendee.timeZone);
+    }).setZone(eventType.owner?.timeZone ?? inputBooking.attendee.timeZone);
+    // Each date is counted from the first date, so a monthly repeat from 31 Jan gives 28 Feb and then 31 Mar.
+    const allStartTimes = Array.from({ length: count }, (_, i) =>
+      firstStartTime.plus({ [FREQUENCY_UNITS[frequency]]: i * interval })
+    );
+    const startTimes =
+      frequency === FrequencyInput.daily || frequency === FrequencyInput.monthly
+        ? await this.removeDatesOutsideWorkingHours(eventType, allStartTimes, lengthInMinutes)
+        : allStartTimes;
 
     const guests =
       inputBooking.guests && platformClientId
@@ -466,7 +463,7 @@ export class InputBookingsService_2024_08_13 {
     this.isBookingLocationWithEventTypeLocations(inputLocation, eventType);
     const location = inputLocation ? this.transformLocation(inputLocation) : undefined;
 
-    for (let i = 0; i < repeatsTimes; i++) {
+    for (const startTime of startTimes) {
       const endTime = startTime.plus({ minutes: lengthInMinutes });
 
       events.push({
@@ -493,23 +490,59 @@ export class InputBookingsService_2024_08_13 {
         ...this.getRoutingFormData(inputBooking.routing),
         rrHostSubsetIds: inputBooking.rrHostSubsetIds,
       });
-
-      switch (timeBetween) {
-        case 0: // Yearly
-          startTime = startTime.plus({ years: repeatsEvery });
-          break;
-        case 1: // Monthly
-          startTime = startTime.plus({ months: repeatsEvery });
-          break;
-        case 2: // Weekly
-          startTime = startTime.plus({ weeks: repeatsEvery });
-          break;
-        default:
-          throw new Error("Unsupported timeBetween value");
-      }
     }
 
     return events;
+  }
+
+  private getEventTypeRecurrence(
+    inputBooking: CreateRecurringBookingInput_2024_08_13,
+    eventType: EventTypeWithOwnerAndTeam
+  ) {
+    if (!eventType.recurringEvent) {
+      throw new NotFoundException(`Event type with id=${inputBooking.eventTypeId} is not a recurring event`);
+    }
+
+    const occurrence = recurringEventSchema.parse(eventType.recurringEvent);
+    if (inputBooking.recurrenceCount && inputBooking.recurrenceCount > occurrence.count) {
+      throw new BadRequestException(
+        "Provided recurrence count is higher than the event type's recurring event count."
+      );
+    }
+
+    return {
+      frequency: FrequencyInput[Frequency[occurrence.freq] as keyof typeof FrequencyInput],
+      count: inputBooking.recurrenceCount || occurrence.count,
+      interval: occurrence.interval,
+    };
+  }
+
+  private async removeDatesOutsideWorkingHours(
+    eventType: EventTypeWithOwnerAndTeam,
+    startTimes: DateTime[],
+    lengthInMinutes: number
+  ) {
+    const scheduleId = eventType.scheduleId ?? eventType.owner?.defaultScheduleId;
+    const schedule = scheduleId ? await this.schedulesRepository.getScheduleById(scheduleId) : null;
+    const timeZone = schedule?.timeZone ?? eventType.owner?.timeZone;
+    if (!schedule || !timeZone) return startTimes;
+
+    const lengthInMillis = lengthInMinutes * 60_000;
+    const workingHours = getWorkingHoursInMillis({
+      availability: schedule.availability,
+      timeZone,
+      dateFrom: startTimes[0].toJSDate(),
+      dateTo: new Date(startTimes[startTimes.length - 1].toMillis() + lengthInMillis),
+    });
+
+    // The first date always stays. If it is not available, the booking fails as a single booking does.
+    // ponytail: scans all working hours for each date, at most 366 dates. Use a binary search if the limit grows.
+    return startTimes.filter((startTime, i) => {
+      const start = startTime.toMillis();
+      return (
+        i === 0 || workingHours.some((range) => range.start <= start && start + lengthInMillis <= range.end)
+      );
+    });
   }
 
   async createRescheduleBookingRequest(
