@@ -119,20 +119,7 @@ export class BookingsService_2024_08_13 {
       if (!eventType) {
         this.errorsBookingsService.handleEventTypeToBeBookedNotFound(body);
       }
-      const userIsEventTypeAdminOrOwner = authUser
-        ? await this.eventTypeAccessService.userIsEventTypeAdminOrOwner(authUser, eventType)
-        : false;
-      await this.checkBookingRequiresAuthenticationSetting(eventType, authUser, userIsEventTypeAdminOrOwner);
-
-      if (eventType.schedulingType === "MANAGED") {
-        throw new BadRequestException(
-          `Event type with id=${eventType.id} is the parent managed event type that can't be booked. You have to provide the child event type id aka id of event type that has been assigned to one of the users.`
-        );
-      }
-
-      if (eventType.schedulingType === "COLLECTIVE" || eventType.schedulingType === "ROUND_ROBIN") {
-        await this.checkEventTypeHasHosts(eventType.id);
-      }
+      const userIsEventTypeAdminOrOwner = await this.checkEventTypeCanBeBooked(eventType, authUser);
 
       body.eventTypeId = eventType.id;
 
@@ -155,6 +142,24 @@ export class BookingsService_2024_08_13 {
     } catch (error) {
       this.errorsBookingsService.handleBookingError(error, bookingTeamEventType);
     }
+  }
+
+  async checkEventTypeCanBeBooked(eventType: EventTypeWithOwnerAndTeam, authUser: AuthOptionalUser) {
+    const userIsEventTypeAdminOrOwner = authUser
+      ? await this.eventTypeAccessService.userIsEventTypeAdminOrOwner(authUser, eventType)
+      : false;
+    await this.checkBookingRequiresAuthenticationSetting(eventType, authUser, userIsEventTypeAdminOrOwner);
+
+    if (eventType.schedulingType === "MANAGED") {
+      throw new BadRequestException(
+        `Event type with id=${eventType.id} is the parent managed event type that can't be booked. You have to provide the child event type id aka id of event type that has been assigned to one of the users.`
+      );
+    }
+
+    if (eventType.schedulingType === "COLLECTIVE" || eventType.schedulingType === "ROUND_ROBIN") {
+      await this.checkEventTypeHasHosts(eventType.id);
+    }
+    return userIsEventTypeAdminOrOwner;
   }
 
   async checkEventTypeHasHosts(eventTypeId: number) {
@@ -761,7 +766,14 @@ export class BookingsService_2024_08_13 {
         isIndividualSeatReschedule
       );
 
-      await this.canRescheduleBooking(bookingUid);
+      const originalBooking = await this.canRescheduleBooking(bookingUid);
+      if (bookingRequest.body.eventTypeId !== originalBooking.eventTypeId) {
+        // A move to another event type books that event type, so it gets the same checks as a new booking.
+        const eventType = await this.eventTypesRepository.getEventTypeByIdWithOwnerAndTeam(
+          bookingRequest.body.eventTypeId
+        );
+        if (eventType) await this.checkEventTypeCanBeBooked(eventType, authUser);
+      }
 
       const booking = await this.regularBookingService.createBooking({
         bookingData: bookingRequest.body,
