@@ -28,7 +28,8 @@ export const handleNewRecurringBooking = async function (
   });
   const appsStatus: AppsStatus[] | undefined = undefined;
 
-  const numSlotsToCheckForAvailability = 1;
+  // Occurrences are written one by one without a transaction, so all of them are checked before the first write.
+  const numSlotsToCheckForAvailability = data.length;
 
   let thirdPartyRecurringEventId = null;
 
