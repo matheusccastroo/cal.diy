@@ -769,13 +769,16 @@ async function handler(
     tracingLogger
   );
 
-  validateEventLength({
-    reqBodyStart: reqBody.start,
-    reqBodyEnd: reqBody.end,
-    eventTypeMultipleDuration: eventType.metadata?.multipleDuration,
-    eventTypeLength: eventType.length,
-    logger: tracingLogger,
-  });
+  // A reschedule can set any length, also one that the event type does not list.
+  if (!reqBody.rescheduleUid) {
+    validateEventLength({
+      reqBodyStart: reqBody.start,
+      reqBodyEnd: reqBody.end,
+      eventTypeMultipleDuration: eventType.metadata?.multipleDuration,
+      eventTypeLength: eventType.length,
+      logger: tracingLogger,
+    });
+  }
 
   const contactOwnerFromReq = reqBody.teamMemberEmail ?? null;
 
